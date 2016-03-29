@@ -722,7 +722,7 @@ void get_threads_info(void)
         ev.eid     = THREAD_START;
         ev.pid     = ProcessID;
         ev.tid     = ThreadID;
-        ev.ea      = read_pc_register(ThreadID);
+        ev.ea      = BADADDR; //read_pc_register(ThreadID);
         ev.handled = true;
 
         events.enqueue(ev, IN_BACK);
@@ -732,6 +732,7 @@ void get_threads_info(void)
         // set break point on current instruction
         //gdb_add_bp(ev.ea, GDB_BP_TYPE_X, 4);
         //step_bpts.insert(ev.ea);
+        //gdb_pause();
     }
 }
 
@@ -788,8 +789,6 @@ static int idaapi deci3_start_process(const char *path,
     get_threads_info();
     get_modules_info();
     clear_all_bp(-1);
-
-    gdb_handle_events(handle_events);
 
     gdb_continue();
 
@@ -875,8 +874,6 @@ int idaapi deci3_detach_process(void)
 {
     debug_printf("deci3_detach_process\n");
 
-    gdb_handle_events(handle_events);
-
     gdb_continue();
 
     gdb_deinit();
@@ -901,7 +898,7 @@ int idaapi prepare_to_pause_process(void)
 {
     debug_printf("prepare_to_pause_process\n");
 
-    //gdb_pause();
+    gdb_pause();
 
     debug_event_t ev;
     ev.eid     = PROCESS_SUSPEND;
@@ -916,8 +913,6 @@ int idaapi prepare_to_pause_process(void)
 int idaapi deci3_exit_process(void)
 {
     debug_printf("deci3_exit_process\n");
-
-    gdb_handle_events(handle_events);
 
     gdb_kill();
 
@@ -1018,9 +1013,6 @@ int idaapi continue_after_event(const debug_event_t *event)
     if ( event == NULL )
         return false;
 
-    if (!events.empty())
-        return true;
-
 #ifdef _DEBUG
 
     if (event->eid == BREAKPOINT && event->bpt.hea != BADADDR)
@@ -1034,15 +1026,19 @@ int idaapi continue_after_event(const debug_event_t *event)
 
 #endif
 
-    gdb_handle_events(handle_events);
+    if (!events.empty())
+    {
+        debug_printf("more events\n");
+        return true;
+    }
 
     switch (event->eid)
     {
     case PROCESS_ATTACH:
     case PROCESS_SUSPEND:
+    case NO_EVENT:
     case STEP:
     case BREAKPOINT:
-    case NO_EVENT:
         gdb_continue();
         break;
     default:
@@ -1062,8 +1058,6 @@ int idaapi thread_suspend(thid_t tid)
 {
     debug_printf("thread_suspend: tid = 0x%llX\n", (uint64)tid);
 
-    gdb_handle_events(handle_events);
-
     gdb_pause();
 
     return 1;
@@ -1074,218 +1068,12 @@ int idaapi thread_continue(thid_t tid)
 {
     debug_printf("thread_continue: tid = 0x%llX\n", (uint64)tid);
 
-    gdb_handle_events(handle_events);
-
     gdb_continue();
 
     return 1;
 }
 
 #define G_STR_SIZE 256
-
-enum spu_instructions
-{
-    SPU_a  =   58,
-    SPU_absdb  =   150,
-    SPU_addx  =   108,
-    SPU_ah  =   76,
-    SPU_ahi  =   9,
-    SPU_ai  =   8,
-    SPU_and  =   70,
-    SPU_andbi  =   7,
-    SPU_andc  =   59,
-    SPU_andhi  =   6,
-    SPU_andi  =   5,
-    SPU_avgb  =   84,
-    SPU_bg  =   41,
-    SPU_bgx  =   97,
-    SPU_bi  =   109,
-    SPU_bihnz  =   93,
-    SPU_bihz  =   92,
-    SPU_binz  =   91,
-    SPU_bisl  =   110,
-    SPU_bisled  =   112,
-    SPU_biz  =   90,
-    SPU_br  =   171,
-    SPU_bra  =   166,
-    SPU_brasl  =   169,
-    SPU_brhnz  =   163,
-    SPU_brhz  =   161,
-    SPU_brnz  =   159,
-    SPU_brsl  =   172,
-    SPU_brz  =   157,
-    SPU_cbd  =   180,
-    SPU_cbx  =   139,
-    SPU_cdd  =   183,
-    SPU_cdx  =   142,
-    SPU_ceq  =   124,
-    SPU_ceqb  =   138,
-    SPU_ceqbi  =   27,
-    SPU_ceqh  =   131,
-    SPU_ceqhi  =   26,
-    SPU_ceqi  =   25,
-    SPU_cflts  =   195,
-    SPU_cfltu  =   196,
-    SPU_cg  =   60,
-    SPU_cgt  =   39,
-    SPU_cgtb  =   44,
-    SPU_cgtbi  =   17,
-    SPU_cgth  =   42,
-    SPU_cgthi  =   16,
-    SPU_cgti  =   15,
-    SPU_cgx  =   96,
-    SPU_chd  =   181,
-    SPU_chx  =   140,
-    SPU_clgt  =   69,
-    SPU_clgtb  =   83,
-    SPU_clgtbi  =   21,
-    SPU_clgth  =   65,
-    SPU_clgthi  =   20,
-    SPU_clgti  =   19,
-    SPU_clz  =   62,
-    SPU_cntb  =   66,
-    SPU_csflt  =   197,
-    SPU_cuflt  =   198,
-    SPU_cwd  =   182,
-    SPU_cwx  =   141,
-    SPU_dfa  =   80,
-    SPU_dfceq  =   126,
-    SPU_dfcgt  =   72,
-    SPU_dfcmeq  =   133,
-    SPU_dfcmgt  =   79,
-    SPU_dfm  =   82,
-    SPU_dfma  =   101,
-    SPU_dfms  =   102,
-    SPU_dfnma  =   104,
-    SPU_dfnms  =   103,
-    SPU_dfs  =   81,
-    SPU_dftsv  =   178,
-    SPU_dsync  =   32,
-    SPU_eqv  =   43,
-    SPU_fa  =   73,
-    SPU_fceq  =   125,
-    SPU_fcgt  =   71,
-    SPU_fcmeq  =   132,
-    SPU_fcmgt  =   78,
-    SPU_fesd  =   45,
-    SPU_fi  =   86,
-    SPU_fm  =   75,
-    SPU_fma  =   155,
-    SPU_fms  =   156,
-    SPU_fnms  =   154,
-    SPU_frds  =   47,
-    SPU_frest  =   121,
-    SPU_frsqest  =   122,
-    SPU_fs  =   74,
-    SPU_fscrrd  =   107,
-    SPU_fscrwr  =   123,
-    SPU_fsm  =   117,
-    SPU_fsmb  =   119,
-    SPU_fsmbi  =   162,
-    SPU_fsmh  =   118,
-    SPU_gb  =   114,
-    SPU_gbb  =   116,
-    SPU_gbh  =   115,
-    SPU_hbr  =   113,
-    SPU_hbra  =   192,
-    SPU_hbrr  =   194,
-    SPU_heq  =   89,
-    SPU_heqi  =   28,
-    SPU_hgt  =   37,
-    SPU_hgti  =   18,
-    SPU_hlgt  =   85,
-    SPU_hlgti  =   22,
-    SPU_il  =   165,
-    SPU_ila  =   193,
-    SPU_ilh  =   160,
-    SPU_ilhu  =   173,
-    SPU_iohl  =   167,
-    SPU_iret  =   111,
-    SPU_lnop  =   30,
-    SPU_lqa  =   170,
-    SPU_lqd  =   11,
-    SPU_lqr  =   168,
-    SPU_lqx  =   127,
-    SPU_lr  =   199,
-    SPU_mfspr  =   34,
-    SPU_mpy  =   61,
-    SPU_mpya  =   153,
-    SPU_mpyh  =   128,
-    SPU_mpyhh  =   129,
-    SPU_mpyhha  =   99,
-    SPU_mpyhhau  =   100,
-    SPU_mpyhhu  =   136,
-    SPU_mpyi  =   23,
-    SPU_mpys  =   130,
-    SPU_mpyu  =   38,
-    SPU_mpyui  =   24,
-    SPU_mtspr  =   87,
-    SPU_nand  =   68,
-    SPU_nop  =   33,
-    SPU_nor  =   120,
-    SPU_or  =   40,
-    SPU_orbi  =   2,
-    SPU_orc  =   77,
-    SPU_orhi  =   1,
-    SPU_ori  =   0,
-    SPU_orx  =   149,
-    SPU_rchcnt  =   36,
-    SPU_rdch  =   35,
-    SPU_rot  =   48,
-    SPU_roth  =   52,
-    SPU_rothi  =   188,
-    SPU_rothm  =   53,
-    SPU_rothmi  =   189,
-    SPU_roti  =   184,
-    SPU_rotm  =   49,
-    SPU_rotma  =   50,
-    SPU_rotmah  =   54,
-    SPU_rotmahi  =   190,
-    SPU_rotmai  =   186,
-    SPU_rotmi  =   185,
-    SPU_rotqbi  =   143,
-    SPU_rotqbii  =   179,
-    SPU_rotqby  =   146,
-    SPU_rotqbybi  =   134,
-    SPU_rotqbyi  =   176,
-    SPU_rotqmbi  =   144,
-    SPU_rotqmbii  =   174,
-    SPU_rotqmby  =   147,
-    SPU_rotqmbybi  =   135,
-    SPU_rotqmbyi  =   177,
-    SPU_selb  =   151,
-    SPU_sf  =   105,
-    SPU_sfh  =   56,
-    SPU_sfhi  =   4,
-    SPU_sfi  =   3,
-    SPU_sfx  =   95,
-    SPU_shl  =   51,
-    SPU_shlh  =   55,
-    SPU_shlhi  =   57,
-    SPU_shli  =   187,
-    SPU_shlqbi  =   145,
-    SPU_shlqbii  =   191,
-    SPU_shlqby  =   148,
-    SPU_shlqbybi  =   137,
-    SPU_shlqbyi  =   175,
-    SPU_shufb  =   152,
-    SPU_stop  =   29,
-    SPU_stopd  =   94,
-    SPU_stqa  =   158,
-    SPU_stqd  =   10,
-    SPU_stqr  =   164,
-    SPU_stqx  =   98,
-    SPU_sumb  =   46,
-    SPU_sync  =   31,
-    SPU_wrch  =   88,
-    SPU_xor  =   106,
-    SPU_xorbi  =   14,
-    SPU_xorhi  =   13,
-    SPU_xori  =   12,
-    SPU_xsbh  =   67,
-    SPU_xshw  =   64,
-    itype_xswd  =   63,
-};
 
 //-------------------------------------------------------------------------
 ea_t get_branch_target(uint32 tid, insn_t insn_cmd, int operand, bool& link)
@@ -1320,8 +1108,6 @@ int do_step(uint32 tid, uint32 dbg_notification)
 
     char mnem[G_STR_SIZE] = {0};
 
-    gdb_handle_events(handle_events);
-
     ea_t ea = read_pc_register(tid);
 
     mnem[0] = 0;
@@ -1340,12 +1126,7 @@ int do_step(uint32 tid, uint32 dbg_notification)
         case PPC_balways:
         {
             resolved_addr = get_branch_target(tid, l_cmd, -1, link);
-            if (!link)
-            {
-                unconditional_noret = true;
-                next_addr = resolved_addr;
-                resolved_addr = BADADDR;
-            }
+            unconditional_noret = !link;
         }
         break;
         case PPC_bc:         // Branch Conditional
@@ -1370,12 +1151,7 @@ int do_step(uint32 tid, uint32 dbg_notification)
         case PPC_b:          // Branch
         {
             resolved_addr = get_branch_target(tid, l_cmd, 0, link); //l_cmd.Op1.addr;
-            if (!link)
-            {
-                unconditional_noret = true;
-                next_addr = resolved_addr;
-                resolved_addr = BADADDR;
-            }
+            unconditional_noret = !link;
         }
         break;
         case PPC_bcctr:      // Branch Conditional to Count Register
@@ -1407,7 +1183,7 @@ int do_step(uint32 tid, uint32 dbg_notification)
         debug_printf("\tnext address: %08X - resolved address: %08X - decoded mnemonic: %s - decoded itype: 0x%04X\n", next_addr, resolved_addr, mnem, l_cmd.itype);
     }
 
-    uint32 instruction;
+    //uint32 instruction;
     if (BADADDR != next_addr && (BADADDR == resolved_addr || !unconditional_noret))
     {
         gdb_add_bp(next_addr, GDB_BP_TYPE_X, 4);
@@ -1446,44 +1222,41 @@ int idaapi thread_set_step(thid_t tid)
 //-------------------------------------------------------------------------
 uint32 read_pc_register(uint32 tid) 
 {
-    gdb_handle_events(handle_events);
-
     u64 reg[2];
     gdb_read_register(register_ids[REF_INDEX_PC], reg);
 
-    return reg[0];
+    return (u32)reg[0];
 }
 
 //-------------------------------------------------------------------------
 uint32 read_lr_register(uint32 tid)
 {
-    gdb_handle_events(handle_events);
-
     u64 reg[2];
     gdb_read_register(register_ids[REF_INDEX_LR], reg);
 
-    return reg[0];
+    return (u32)reg[0];
 }
 
 //-------------------------------------------------------------------------
 uint32 read_ctr_register(uint32 tid)
 {
-    gdb_handle_events(handle_events);
-
     u64 reg[2];
     gdb_read_register(register_ids[REF_INDEX_CTR], reg);
 
-    return reg[0];
+    return (u32)reg[0];
 }
 
 void set_register_value(char dtyp, regval_t& reg, const u64 values[2])
 {
     switch (dtyp)
     {
-    case dt_dword:
-    case dt_qword:
     case dt_float:
     case dt_double:
+    {
+        reg.rvtype = RVT_FLOAT;
+    }
+    case dt_dword:
+    case dt_qword:
     {
         reg.ival = values[0];
     }
@@ -1535,8 +1308,6 @@ int idaapi read_registers(thid_t tid, int clsmask, regval_t *values)
     }
 
     debug_printf("read_registers\n");
-
-    gdb_handle_events(handle_events);
 
     context regs = { 0 };
     gdb_read_registers(regs);
@@ -1609,8 +1380,6 @@ int idaapi write_register(thid_t tid, int reg_idx, const regval_t *value)
     const int reg_id = register_ids[reg_idx];
     const int reg_type = registers[reg_idx].dtyp;
 
-    gdb_handle_events(handle_events);
-
     gdb_read_register(reg_id, reg);
 
     get_register_value(reg_type, *value, reg);
@@ -1636,7 +1405,7 @@ int idaapi get_memory_info(meminfo_vec_t &areas)
     memory_info_t info;
 
     info.startEA = 0;
-    info.endEA = 0; // 0xFFFF0000;
+    info.endEA = 0xFFFF0000;
     info.name = NULL;
     info.sclass = NULL;
     info.sbase = 0;
@@ -1645,7 +1414,7 @@ int idaapi get_memory_info(meminfo_vec_t &areas)
     
     areas.push_back(info);
 
-    return -3;
+    return 1;
 }
 
 //--------------------------------------------------------------------------
@@ -1653,8 +1422,6 @@ int idaapi get_memory_info(meminfo_vec_t &areas)
 ssize_t idaapi read_memory(ea_t ea, void *buffer, size_t size)
 {
     debug_printf("read_memory\n");
-
-    gdb_handle_events(handle_events);
 
     return gdb_read_mem(ea, (u8*)buffer, size);
 }
@@ -1664,8 +1431,6 @@ ssize_t idaapi read_memory(ea_t ea, void *buffer, size_t size)
 ssize_t idaapi write_memory(ea_t ea, const void *buffer, size_t size)
 {
     debug_printf("write_memory\n");
-
-    gdb_handle_events(handle_events);
 
     return gdb_write_mem(ea, (u8*)buffer, size);
 }
@@ -1776,14 +1541,12 @@ int idaapi update_bpts(update_bpt_info_t *bpts, int nadd, int ndel)
     int i;
     //std::vector<uint32>::iterator it;
     uint32 orig_inst = -1;
-    uint32 BPCount;
+    //uint32 BPCount;
     int cnt = 0;
 
     //debug_printf("BreakPoints sum: %d\n", BPCount);
 
     //bp_list();
-
-    gdb_handle_events(handle_events);
 
     for (i = 0; i < ndel; i++)
     {
@@ -1945,7 +1708,7 @@ ea_t idaapi map_address(ea_t off, const regval_t *regs, int regnum)
 
     if (regnum >= 0)
     {
-        if (regnum < GPR_COUNT)
+        if (0 != (registers[regnum].flags & REGISTER_ADDRESS))
         {
             return regs[regnum].ival & 0xFFFFFFFF;
         }

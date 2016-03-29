@@ -4,7 +4,6 @@
 
 
 #include "types.h"
-#include "gdb.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -25,6 +24,7 @@
 
 #include <dbg.hpp>
 
+#include "gdb.h"
 
 #undef dbgprintf
 #ifndef _DEBUG
@@ -68,7 +68,7 @@ bool fail(const char *a, ...)
     va_list va;
 
     va_start(va, a);
-    vsnprintf(msg, sizeof msg, a, va);
+    vsnprintf_s(msg, 1024, sizeof msg, a, va);
     perror(msg);
 
     dbgprintf(msg);
@@ -740,7 +740,7 @@ void gdb_write_register(u32 id, u64 reg[2])
 
     if (0 <= id && id <= 31)
     {
-        wbe32hex(bufptr, reg[0]);
+        wbe32hex(bufptr, (u32)reg[0]);
     }
     else if (32 <= id && id <= 63)
     {
@@ -752,28 +752,28 @@ void gdb_write_register(u32 id, u64 reg[2])
         switch (id)
         {
         case 64:
-            wbe32hex(bufptr, reg[0]);
+            wbe32hex(bufptr, (u32)reg[0]);
             break;
         case 65:
-            wbe32hex(bufptr, reg[0]);
+            wbe32hex(bufptr, (u32)reg[0]);
             break;
         case 66:
-            wbe32hex(bufptr, reg[0]);
+            wbe32hex(bufptr, (u32)reg[0]);
             break;
         case 67:
-            wbe32hex(bufptr, reg[0]);
+            wbe32hex(bufptr, (u32)reg[0]);
             break;
         case 68:
-            wbe32hex(bufptr, reg[0]);
+            wbe32hex(bufptr, (u32)reg[0]);
             break;
         case 69:
-            wbe32hex(bufptr, reg[0]);
+            wbe32hex(bufptr, (u32)reg[0]);
             break;
         case 70:
             return;
             break;
         case 71:
-            wbe32hex(bufptr, reg[0]);
+            wbe32hex(bufptr, (u32)reg[0]);
             break;
         default:
             return;
@@ -1030,7 +1030,7 @@ static void gdb_parse_command(event_callback* callback)
 bool gdb_init(u32 port)
 {
     int tmpsock;
-    socklen_t len;
+    //socklen_t len;
     int on;
 #ifdef _WIN32
     WSAStartup(MAKEWORD(2,2), &InitData);

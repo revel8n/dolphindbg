@@ -13,7 +13,9 @@
 #define	SIGTERM 15
 #define SIGSTOP 23 // values listed for MIPS?
 #define SIGCONT 25 // values listed for MIPS?
+#ifndef MSG_WAITALL
 #define MSG_WAITALL  8
+#endif
 #endif
 
 #define	LS_SIZE	32 * 1024 * 1024
