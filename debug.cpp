@@ -33,6 +33,7 @@
 #include <segment.hpp>
 #include <dbg.hpp>
 #include <allins.hpp>
+#include <ieee.h>
 
 #include "debmod.h"
 
@@ -1028,7 +1029,11 @@ int idaapi continue_after_event(const debug_event_t *event)
 
     if (!events.empty())
     {
-        debug_printf("more events\n");
+        debug_printf("more events (%d):\n", events.size());
+        for each (const debug_event_t& var in events)
+        {
+            debug_printf("  pending - %s\n", get_event_name(var.eid));
+        }
         return true;
     }
 
@@ -1251,10 +1256,23 @@ void set_register_value(char dtyp, regval_t& reg, const u64 values[2])
     switch (dtyp)
     {
     case dt_float:
+    {
+        eNE fv;
+        u32 v = bswap32(values[0]);
+        ph.realcvt(&v, fv, 001);
+
+        reg.set_float(fv);
+    }
+    break;
     case dt_double:
     {
-        reg.rvtype = RVT_FLOAT;
+        eNE fv;
+        u64 v = bswap64(values[0]);
+        ph.realcvt(&v, fv, 003);
+
+        reg.set_float(fv);
     }
+    break;
     case dt_dword:
     case dt_qword:
     {
@@ -1277,10 +1295,18 @@ void get_register_value(char dtyp, const regval_t& reg, u64 values[2])
 {
     switch (dtyp)
     {
+    case dt_float:
+    {
+        ph.realcvt(values, const_cast<uint16*>(reg.fval), 011);
+    }
+    break;
+    case dt_double:
+    {
+        ph.realcvt(values, const_cast<uint16*>(reg.fval), 013);
+    }
+    break;
     case dt_dword:
     case dt_qword:
-    case dt_float:
-    case dt_double:
     {
         values[0] = reg.ival;
     }
@@ -1312,7 +1338,7 @@ int idaapi read_registers(thid_t tid, int clsmask, regval_t *values)
     context regs = { 0 };
     gdb_read_registers(regs);
 
-    for (u32 i = 0; i <= qnumber(registers); ++i)
+    for (u32 i = 0; i < qnumber(registers); ++i)
     {
         if (0 == (clsmask & registers[i].register_class))
             continue;

@@ -169,7 +169,7 @@ static bool idaapi ps2_print_2_doubles(
     if (0 != out)
     {
         double* d = (double*)value;
-        out->sprnt("%0.lf %0.lf", d[1], d[0]);
+        out->sprnt("%0.8lf %0.8lf", d[1], d[0]);
     }
 
     return true;
@@ -191,7 +191,7 @@ static bool idaapi ps2_print_4_floats(
     if (0 != out)
     {
         float* v = (float*)value;
-        out->sprnt("%0.f %0.f %0.f %0.f", v[3], v[2], v[1], v[0]);
+        out->sprnt("%0.6f %0.6f %0.6f %0.6f", v[3], v[2], v[1], v[0]);
     }
 
     return true;
