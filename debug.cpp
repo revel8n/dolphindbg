@@ -1390,66 +1390,22 @@ int idaapi is_ok_bpt(bpttype_t type, ea_t ea, int len)
                 debug_printf("Write access\n");
 
                 return BPT_OK;
-
-                /*if (len != 8)
-                {
-                    msg("Hardware breakpoints must be 8 bytes long\n");
-                    return BPT_BAD_LEN;
-                }*/
-                
-/*
-                if (ea % 8 != 0)
-                {
-                    msg("Hardware breakpoints must be 8 byte aligned\n");
-                    return BPT_BAD_ALIGN;
-                }
-                
-                if (dabr_is_set == false)
-                {
-                    //dabr_is_set is not set yet bug
-                    return BPT_OK;
-                }
-                else
-                {
-                    msg("It's possible to set a single hardware breakpoint\n");
-                    return BPT_TOO_MANY;
-                }
-*/
             }
             break;
 
-            // No read access?
+        case BPT_READ:
+            {
+                debug_printf("Read access\n");
+
+                return BPT_OK;
+            }
+            break;
 
         case BPT_RDWR:
             {
                 debug_printf("Read/write access\n");
 
                 return BPT_OK;
-
-                /*if (len != 8)
-                {
-                    msg("Hardware breakpoints must be 8 bytes long\n");
-                    return BPT_BAD_LEN;
-                }*/
-
-/*
-                if (ea % 8 != 0)
-                {
-                    msg("Hardware breakpoints must be 8 byte aligned\n");
-                    return BPT_BAD_ALIGN;
-                }
-
-                if (dabr_is_set == false)
-                {
-                    //dabr_is_set is not set yet bug
-                    return BPT_OK;
-                }
-                else
-                {
-                    msg("It's possible to set a single hardware breakpoint\n");
-                    return BPT_TOO_MANY;
-                }
-*/
             }
             break;
 
@@ -1466,14 +1422,8 @@ int idaapi update_bpts(update_bpt_info_t *bpts, int nadd, int ndel)
     debug_printf("update_bpts - add: %d - del: %d\n", (uint32)nadd, (uint32)ndel);
 
     int i;
-    //std::vector<uint32>::iterator it;
     uint32 orig_inst = -1;
-    //uint32 BPCount;
     int cnt = 0;
-
-    //debug_printf("BreakPoints sum: %d\n", BPCount);
-
-    //bp_list();
 
     for (i = 0; i < ndel; i++)
     {
@@ -1513,6 +1463,18 @@ int idaapi update_bpts(update_bpt_info_t *bpts, int nadd, int ndel)
                 debug_printf("Write access\n");
 
                 gdb_remove_bp(bpts[nadd + i].ea, GDB_BP_TYPE_W, bpts[nadd + i].size);
+
+                main_bpts.erase(bpts[nadd + i].ea);
+
+                main_bpts_map.erase(bpts[nadd + i].ea);
+            }
+            break;
+
+        case BPT_READ:
+            {
+                debug_printf("Read access\n");
+
+                gdb_remove_bp(bpts[nadd + i].ea, GDB_BP_TYPE_R, bpts[nadd + i].size);
 
                 main_bpts.erase(bpts[nadd + i].ea);
 
@@ -1593,7 +1555,19 @@ int idaapi update_bpts(update_bpt_info_t *bpts, int nadd, int ndel)
             }
             break;
 
-            // No read access?
+        case BPT_READ:
+            {
+                debug_printf("Read access\n");
+
+                gdb_add_bp(bpts[i].ea, GDB_BP_TYPE_R, bpts[i].size);
+
+                bpts[i].code = BPT_OK;
+
+                main_bpts.insert(bpts[i].ea);
+
+                cnt++;
+            }
+            break;
 
         case BPT_RDWR:
             {
@@ -1614,10 +1588,6 @@ int idaapi update_bpts(update_bpt_info_t *bpts, int nadd, int ndel)
             break;
         }
     }
-
-    //debug_printf("BreakPoints sum: %d\n", BPCount);
-
-    //bp_list();
 
     return cnt;
 }
