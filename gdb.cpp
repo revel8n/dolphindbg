@@ -488,17 +488,17 @@ static void gdb_handle_signal(event_callback* callback)
     u32 addr = -1;
 
     // data read breakpoint
-    if (0 == qstrcmp("rwatch", (const char*)&cmd_bfr[21]))
+    if (0 == strnicmp("rwatch", (const char*)&cmd_bfr[21], 6))
     {
        addr = rbe32hex(cmd_bfr + 28);
     }
     // data write breakpoint
-    else if (0 == qstrcmp("watch", (const char*)&cmd_bfr[21]))
+    else if (0 == strnicmp("watch", (const char*)&cmd_bfr[21], 5))
     {
         addr = rbe32hex(cmd_bfr + 27);
     }
     // data read/write breakpoint
-    else if (0 == qstrcmp("awatch", (const char*)&cmd_bfr[21]))
+    else if (0 == strnicmp("awatch", (const char*)&cmd_bfr[21], 6))
     {
         addr = rbe32hex(cmd_bfr + 28);
     }
