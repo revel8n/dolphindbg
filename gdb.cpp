@@ -1081,6 +1081,8 @@ void gdb_deinit(void)
     if (sock == -1)
         return;
 
+    shutdown(sock, SD_BOTH);
+
     closesocket(sock);
     sock = -1;
 
