@@ -503,27 +503,24 @@ static void handle_events(u32 signal, u32 pc, u32 address)
     {
     case SIGABRT:
         {
+            ev.eid     = PROCESS_START;
+            ev.pid     = ProcessID;
+            ev.tid     = ThreadID;
+            ev.ea      = pc;
+            ev.handled = true;
+
+            qstrncpy(ev.modinfo.name, "dolphin", sizeof(ev.modinfo.name));
+            ev.modinfo.base = 0x100000;
+            ev.modinfo.size = 0;
+            ev.modinfo.rebase_to = BADADDR;
+
+            events.enqueue(ev, IN_BACK);
+
             if (attaching)
             {
-                debug_printf("dolphin_DBG_EVENT_PROCESS_START\n");
-
-                attaching = false;
-
-                ev.eid     = PROCESS_START;
-                ev.pid     = ProcessID;
-                ev.tid     = NO_THREAD;
-                ev.ea      = BADADDR;
-                ev.handled = true;
-
-                qstrncpy(ev.modinfo.name, "dolphin", sizeof(ev.modinfo.name));
-                ev.modinfo.base = 0x100000;
-                ev.modinfo.size = 0;
-                ev.modinfo.rebase_to = BADADDR;
-
-                events.enqueue(ev, IN_BACK);
-
-                ev.eid     = PROCESS_SUSPEND;
-                ev.pid     = ProcessID;
+                debug_printf("dolphin_DBG_EVENT_PROCESS_ATTACH\n");
+                
+                ev.eid = PROCESS_ATTACH;
 
                 events.enqueue(ev, IN_BACK);
 
@@ -669,6 +666,9 @@ static bool idaapi init_debugger(const char *hostname, int port_num, const char 
 {
     debug_printf("init_debugger\n");
 
+    events.clear();
+    process_names.clear();
+
     if (!gdb_init(port_num))
         return false;
 
@@ -712,37 +712,23 @@ void get_threads_info(void)
 {
     debug_printf("get_threads_info\n");
 
-    if (attaching == true) 
-    {
-        debug_event_t ev;
+    ThreadID = 1;
 
-        attaching = false;
-
-        ThreadID = 1;
-
-        ev.eid     = THREAD_START;
-        ev.pid     = ProcessID;
-        ev.tid     = ThreadID;
-        ev.ea      = BADADDR; //read_pc_register(ThreadID);
-        ev.handled = true;
-
-        events.enqueue(ev, IN_BACK);
-
-        clear_all_bp(0);
-
-        // set break point on current instruction
-        //gdb_add_bp(ev.ea, GDB_BP_TYPE_X, 4);
-        //step_bpts.insert(ev.ea);
-        //gdb_pause();
-    }
+    return;
 }
 
 void get_modules_info(void)
 {
+    debug_printf("get_modules_info\n");
+
+    return;
 }
 
 void clear_all_bp(uint32 tid)
 {
+    debug_printf("clear_all_bp\n");
+
+    return;
 }
 
 void bp_list(void)
@@ -763,60 +749,20 @@ static int idaapi deci3_start_process(const char *path,
                               const char *input_path,
                               uint32 input_file_crc32)
 {
-    //uint64 tid;
-
     debug_printf("start_process\n");
     debug_printf("path: %s\n", path);
 
     ProcessID = 0;
 
-    attaching = true;
+    process_names[ProcessID] = "dolphin";
 
-    debug_event_t ev;
-
-    ev.eid     = PROCESS_START;
-    ev.pid     = ProcessID;
-    ev.tid     = NO_THREAD;
-    ev.ea      = BADADDR;
-    ev.handled = true;
-
-    qstrncpy(ev.modinfo.name, "dolphin", sizeof(ev.modinfo.name));
-    ev.modinfo.base = 0x100000;
-    ev.modinfo.size = 0;
-    ev.modinfo.rebase_to = BADADDR;
-
-    events.enqueue(ev, IN_BACK);
+    attaching = false;
 
     get_threads_info();
     get_modules_info();
     clear_all_bp(-1);
 
-    gdb_continue();
-
-/*
-    ev.eid     = PROCESS_SUSPEND;
-    ev.pid     = ProcessID;
-
-    events.enqueue(ev, IN_BACK);
-
-    gdb_handle_events(handle_events);
-*/
-
     debug_printf("ProcessID: 0x%X\n", ProcessID);
-
-    /*debug_event_t ev;
-    ev.eid     = PROCESS_START;
-    ev.pid     = ProcessID;
-    ev.tid     = NO_THREAD;
-    ev.ea      = BADADDR;
-    ev.handled = true;
-
-    qstrncpy(ev.modinfo.name, path, sizeof(ev.modinfo.name));
-    ev.modinfo.base = 0x10200;
-    ev.modinfo.size = 0;
-    ev.modinfo.rebase_to = BADADDR;
-
-    events.enqueue(ev, IN_BACK);*/
 
     return 1;
 }
@@ -834,38 +780,9 @@ int idaapi deci3_attach_process(pid_t pid, int event_id)
 
     process_names[ProcessID] = "dolphin";
 
-    debug_event_t ev;
-    ev.eid     = PROCESS_START;
-    ev.pid     = ProcessID;
-    ev.tid     = NO_THREAD;
-    ev.ea      = BADADDR;
-    ev.handled = true;
-
-    qstrncpy(ev.modinfo.name, process_names[ProcessID].c_str(), sizeof(ev.modinfo.name));
-    ev.modinfo.base = 0x100000;
-    ev.modinfo.size = 0;
-    ev.modinfo.rebase_to = BADADDR;
-
-    events.enqueue(ev, IN_BACK);
-
     get_threads_info();
     get_modules_info();
     clear_all_bp(-1);
-
-    ev.eid     = PROCESS_ATTACH;
-    ev.pid     = ProcessID;
-    ev.tid     = NO_THREAD;
-    ev.ea      = BADADDR;
-    ev.handled = true;
-
-    qstrncpy(ev.modinfo.name, process_names[ProcessID].c_str(), sizeof(ev.modinfo.name));
-    ev.modinfo.base = 0x100000;
-    ev.modinfo.size = 0;
-    ev.modinfo.rebase_to = BADADDR;
-
-    events.enqueue(ev, IN_BACK);
-
-    process_names.clear();
 
     return 1;
 }
@@ -878,13 +795,13 @@ int idaapi deci3_detach_process(void)
     gdb_continue();
 
     gdb_deinit();
-
+    
     debug_event_t ev;
     ev.eid     = PROCESS_DETACH;
     ev.pid     = ProcessID;
 
     events.enqueue(ev, IN_BACK);
-
+    
     return 1;
 }
 
@@ -901,12 +818,6 @@ int idaapi prepare_to_pause_process(void)
 
     gdb_pause();
 
-    debug_event_t ev;
-    ev.eid     = PROCESS_SUSPEND;
-    ev.pid     = ProcessID;
-
-    events.enqueue(ev, IN_BACK);
-
     return 1;
 }
 
@@ -916,7 +827,7 @@ int idaapi deci3_exit_process(void)
     debug_printf("deci3_exit_process\n");
 
     gdb_kill();
-
+    
     debug_event_t ev;
     ev.eid     = PROCESS_EXIT;
     ev.pid     = ProcessID;
@@ -926,7 +837,7 @@ int idaapi deci3_exit_process(void)
     ev.handled = true;
 
     events.enqueue(ev, IN_BACK);
-
+    
     return 1;
 }
 
@@ -965,43 +876,24 @@ gdecode_t idaapi get_debug_event(debug_event_t *event, int ida_is_idle)
     if ( event == NULL )
         return GDE_NO_EVENT;
 
-    while ( true )
-    {
-        gdb_handle_events(handle_events);
+    gdb_handle_events(handle_events);
 
-        if ( events.retrieve(event) )
-        {
+    if (events.retrieve(event))
+    {
 #ifdef _DEBUG
 
-            if (event->eid == BREAKPOINT && event->bpt.hea != BADADDR)
-            {
-                debug_printf("get_debug_event: BREAKPOINT (HW)\n");
-            }
-            else
-            {
-                debug_printf("get_debug_event: %s\n", get_event_name(event->eid));
-            }
+        if (event->eid == BREAKPOINT && event->bpt.hea != BADADDR)
+        {
+            debug_printf("get_debug_event: BREAKPOINT (HW)\n");
+        }
+        else
+        {
+            debug_printf("get_debug_event: %s\n", get_event_name(event->eid));
+        }
 
 #endif
 
-            if (event->eid == PROCESS_ATTACH)
-            {
-                attaching = false;
-            }
-
-            if (attaching == false) 
-            {
-            }
-
-            return (events.empty()) ? GDE_ONE_EVENT : GDE_MANY_EVENTS;
-        }
-
-        if (events.empty())
-            break;
-    }
-
-    if (attaching == false)
-    {
+        return (events.empty()) ? GDE_ONE_EVENT : GDE_MANY_EVENTS;
     }
 
     return GDE_NO_EVENT;
@@ -1039,14 +931,23 @@ int idaapi continue_after_event(const debug_event_t *event)
 
     switch (event->eid)
     {
+    case THREAD_START:
+    case NO_EVENT:
+        break;
+    case PROCESS_START:
+    {
+        if (attaching)
+        {
+            attaching = false;
+            break;
+        }
+    }
     case PROCESS_ATTACH:
     case PROCESS_SUSPEND:
-    case NO_EVENT:
     case STEP:
     case BREAKPOINT:
-        gdb_continue();
-        break;
     default:
+        gdb_continue();
         break;
     } 
 
