@@ -86,8 +86,9 @@ std::set<uint32> main_bpts;
 
 static const unsigned char bpt_code[] = {0x7f, 0xe0, 0x00, 0x08};
 
-#define STEP_INTO 15
-#define STEP_OVER 16
+#define STEP_NONE dbg_null
+#define STEP_INTO dbg_step_into
+#define STEP_OVER dbg_step_over
 
 #define RC_GENERAL 1
 #define RC_FLOAT   2
@@ -1107,14 +1108,30 @@ int do_step(uint32 tid, uint32 dbg_notification)
 
 //--------------------------------------------------------------------------
 // Run one instruction in the thread
+#if (IDD_INTERFACE_VERSION <= 17) // IDA Pro <= 6.5
 int idaapi thread_set_step(thid_t tid)
+#elif (IDD_INTERFACE_VERSION == 19) // IDA Pro == 6.8
+int idaapi thread_set_resume_mode(thid_t tid, resume_mode_t resume_mode)
+#endif
 {
     debug_printf("thread_set_step\n");
 
-    int dbg_notification;
     int result = 0;
 
-    dbg_notification = get_running_notification();
+#if (IDD_INTERFACE_VERSION <= 17) // IDA Pro <= 6.5
+    int dbg_notification = get_running_notification();
+#elif (IDD_INTERFACE_VERSION == 19) // IDA Pro == 6.8
+    int dbg_notification = dbg_null;
+    switch (resume_mode)
+    {
+    case RESMOD_INTO:
+        dbg_notification = STEP_INTO;
+        break;
+    case RESMOD_OVER:
+        dbg_notification = STEP_OVER;
+        break;
+    }
+#endif
 
     if (dbg_notification == STEP_INTO || dbg_notification == STEP_OVER)
     {
@@ -1643,7 +1660,11 @@ debugger_t debugger =
     bpt_code,				    // Array of bytes for a breakpoint instruction
     qnumber(bpt_code),			// Size of this array
     0,							// for miniidbs: use this value for the file type after attaching
+#if (IDD_INTERFACE_VERSION <= 17) // IDA Pro <= 6.5
     0,							// reserved
+#elif (IDD_INTERFACE_VERSION == 19) // IDA Pro == 6.8
+    DBG_RESMOD_STEP_INTO | DBG_RESMOD_STEP_OVER,    // resume_modes
+#endif
 
     init_debugger,
     term_debugger,
@@ -1663,7 +1684,11 @@ debugger_t debugger =
 
     thread_suspend,
     thread_continue,
+#if (IDD_INTERFACE_VERSION <= 17) // IDA Pro <= 6.5
     thread_set_step,
+#elif (IDD_INTERFACE_VERSION == 19) // IDA Pro == 6.8
+    thread_set_resume_mode,
+#endif
     read_registers,
     write_register,
     NULL, //thread_get_sreg_base
@@ -1687,4 +1712,10 @@ debugger_t debugger =
     NULL, //eval_lowcnd
     NULL, //write_file
     send_ioctl,
+#if (IDD_INTERFACE_VERSION == 19) // IDA Pro == 6.8
+    NULL, // dbg_enable_trace
+    NULL, // is_tracing_enabled
+    NULL, // rexec
+    NULL, // get_debapp_attrs
+#endif
 };
