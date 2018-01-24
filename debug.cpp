@@ -39,11 +39,8 @@
 
 #include "gdb.h"
 
-#ifdef _DEBUG
+#undef dbgprintf
 #define debug_printf ::msg
-#else
-#define debug_printf(...)
-#endif
 
 #define DEBUGGER_NAME "dolphin"
 #define DEBUGGER_ID (0x8003)
@@ -500,9 +497,9 @@ static void handle_events(u32 signal, u32 pc, u32 address)
 
     debug_event_t ev;
 
-    switch (signal)
+    switch ((SignalTypes)signal)
     {
-    case SIGABRT:
+    case SignalTypes::Connected:
         {
             ev.eid     = PROCESS_START;
             ev.pid     = ProcessID;
@@ -529,8 +526,7 @@ static void handle_events(u32 signal, u32 pc, u32 address)
             }
         }
         break;
-    case SIGSEGV:
-    case SIGTERM:
+    case SignalTypes::Terminate:
         {
             debug_printf("dolphin_DBG_EVENT_PROCESS_EXIT\n");
 
@@ -544,7 +540,7 @@ static void handle_events(u32 signal, u32 pc, u32 address)
             events.enqueue(ev, IN_BACK);
         }
         break;
-    case SIGSTOP:
+    case SignalTypes::Stop:
         {
             debug_printf("dolphin_DBG_EVENT_PROCESS_SUSPEND\n");
 
@@ -558,7 +554,7 @@ static void handle_events(u32 signal, u32 pc, u32 address)
             events.enqueue(ev, IN_BACK);
         }
         break;
-    case SIGCONT:
+    case SignalTypes::Continue:
         {
             debug_printf("dolphin_DBG_EVENT_PROCESS_CONTINUE\n");
 
@@ -572,7 +568,7 @@ static void handle_events(u32 signal, u32 pc, u32 address)
             events.enqueue(ev, IN_BACK);
         }
         break;
-    case SIGTRAP:
+    case SignalTypes::Trap:
         {
             debug_printf("dolphin_DBG_EVENT_TRAP\n");
 
@@ -757,7 +753,7 @@ static int idaapi deci3_start_process(const char *path,
 
     process_names[ProcessID] = "dolphin";
 
-    attaching = false;
+    attaching = true;
 
     get_threads_info();
     get_modules_info();
@@ -842,8 +838,6 @@ int idaapi deci3_exit_process(void)
     return 1;
 }
 
-#ifdef _DEBUG
-
 static const char *get_event_name(event_id_t id)
 {
     switch ( id )
@@ -868,8 +862,6 @@ static const char *get_event_name(event_id_t id)
     }
 }
 
-#endif
-
 //--------------------------------------------------------------------------
 // Get a pending debug event and suspend the process
 gdecode_t idaapi get_debug_event(debug_event_t *event, int ida_is_idle)
@@ -881,8 +873,6 @@ gdecode_t idaapi get_debug_event(debug_event_t *event, int ida_is_idle)
 
     if (events.retrieve(event))
     {
-#ifdef _DEBUG
-
         if (event->eid == BREAKPOINT && event->bpt.hea != BADADDR)
         {
             debug_printf("get_debug_event: BREAKPOINT (HW)\n");
@@ -891,8 +881,6 @@ gdecode_t idaapi get_debug_event(debug_event_t *event, int ida_is_idle)
         {
             debug_printf("get_debug_event: %s\n", get_event_name(event->eid));
         }
-
-#endif
 
         return (events.empty()) ? GDE_ONE_EVENT : GDE_MANY_EVENTS;
     }
@@ -907,8 +895,6 @@ int idaapi continue_after_event(const debug_event_t *event)
     if ( event == NULL )
         return false;
 
-#ifdef _DEBUG
-
     if (event->eid == BREAKPOINT && event->bpt.hea != BADADDR)
     {
         debug_printf("continue_after_event: BREAKPOINT (HW)\n");
@@ -917,8 +903,6 @@ int idaapi continue_after_event(const debug_event_t *event)
     {
         debug_printf("continue_after_event: %s\n", get_event_name(event->eid));
     }
-
-#endif
 
     if (!events.empty())
     {
@@ -1114,13 +1098,13 @@ int idaapi thread_set_step(thid_t tid)
 int idaapi thread_set_resume_mode(thid_t tid, resume_mode_t resume_mode)
 #endif
 {
+#if (IDD_INTERFACE_VERSION <= 17) // IDA Pro <= 6.5
     debug_printf("thread_set_step\n");
 
-    int result = 0;
-
-#if (IDD_INTERFACE_VERSION <= 17) // IDA Pro <= 6.5
     int dbg_notification = get_running_notification();
 #elif (IDD_INTERFACE_VERSION == 19) // IDA Pro == 6.8
+    debug_printf("thread_set_resume_mode\n");
+
     int dbg_notification = dbg_null;
     switch (resume_mode)
     {
@@ -1132,6 +1116,8 @@ int idaapi thread_set_resume_mode(thid_t tid, resume_mode_t resume_mode)
         break;
     }
 #endif
+
+    int result = 0;
 
     if (dbg_notification == STEP_INTO || dbg_notification == STEP_OVER)
     {
@@ -1648,7 +1634,7 @@ debugger_t debugger =
     DEBUGGER_NAME,				// Short debugger name
     DEBUGGER_ID,	// Debugger API module id
     PROCESSOR_NAME,				// Required processor name
-    DBG_FLAG_REMOTE | DBG_FLAG_NOHOST | DBG_FLAG_NEEDPORT | DBG_FLAG_CAN_CONT_BPT | DBG_FLAG_NOSTARTDIR | DBG_FLAG_NOPARAMETERS | DBG_FLAG_NOPASSWORD | DBG_FLAG_DEBTHREAD,
+    DBG_FLAG_REMOTE | DBG_FLAG_NOHOST | DBG_FLAG_NEEDPORT | DBG_FLAG_CAN_CONT_BPT | DBG_FLAG_NOSTARTDIR | DBG_FLAG_NOPARAMETERS | DBG_FLAG_NOPASSWORD | DBG_FLAG_DEBTHREAD | DBG_FLAG_CLEAN_EXIT,
 
     register_classes,			// Array of register class names
     RC_GENERAL,					// Mask of default printed register classes

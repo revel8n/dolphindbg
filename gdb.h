@@ -8,11 +8,20 @@
 #include <signal.h>
 #include "types.h"
 
+enum class SignalTypes
+{
+    Quit = 3,
+    Trap = 5,
+    Abort = 6,
+    Kill = 9,
+    Terminate = 15,
+    Stop = 17,
+    Continue = 19,
+
+    Connected = 30,
+};
+
 #ifdef _WIN32
-#define SIGTRAP 5
-#define	SIGTERM 15
-#define SIGSTOP 23 // values listed for MIPS?
-#define SIGCONT 25 // values listed for MIPS?
 #ifndef MSG_WAITALL
 #define MSG_WAITALL  8
 #endif

@@ -27,11 +27,7 @@
 #include "gdb.h"
 
 #undef dbgprintf
-#ifndef _DEBUG
-#define dbgprintf(...)
-#else
 #define dbgprintf ::msg
-#endif
 
 #define		GDB_BFR_MAX	10000
 #define		GDB_MAX_BP	10
@@ -446,7 +442,7 @@ static void gdb_reply(const char *reply)
     while ((int)left > 0)
     {
         n = send(sock, (char*)ptr, left, 0);
-        dbgprintf("gdb: reply (sent: %d of %d)\n", n, cmd_len);
+        dbgprintf("gdb: reply (sent: %d of %d)\n", n, cmd_len + 4);
         if (n < 0)
         {
             fail("gdb: send failed\n");
